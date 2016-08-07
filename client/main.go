@@ -53,8 +53,8 @@ func newCompStream(conn net.Conn) *compStream {
 }
 
 func handleClient(p1, p2 io.ReadWriteCloser) {
-	log.Println("stream opened")
-	defer log.Println("stream closed")
+	// log.Println("stream opened")
+	// defer log.Println("stream closed")
 	defer p1.Close()
 	defer p2.Close()
 
@@ -272,8 +272,8 @@ func main() {
 		config := &yamux.Config{
 			AcceptBacklog:          256,
 			EnableKeepAlive:        true,
-			KeepAliveInterval:      30 * time.Second,
-			ConnectionWriteTimeout: 30 * time.Second,
+			KeepAliveInterval:      10 * time.Second,
+			ConnectionWriteTimeout: 10 * time.Second,
 			MaxStreamWindowSize:    uint32(sockbuf),
 			LogOutput:              os.Stderr,
 		}

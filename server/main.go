@@ -11,17 +11,24 @@ import (
 
 	"golang.org/x/crypto/pbkdf2"
 
+	"github.com/armon/go-socks5"
 	"github.com/golang/snappy"
 	"github.com/urfave/cli"
 	kcp "github.com/xtaci/kcp-go"
 	"github.com/xtaci/yamux"
 )
 
+const SELFPROXY = "self"
+
 var (
 	// VERSION is injected by buildflags
 	VERSION = "SELFBUILD"
 	// SALT is use for pbkdf2 key expansion
 	SALT = "kcp-go"
+	// socks5 proxy server in self proxy mode
+	s5svr *socks5.Server
+	// yamux config
+	yamuxConfig *yamux.Config
 )
 
 type compStream struct {
@@ -68,6 +75,12 @@ func handleMux(conn io.ReadWriteCloser, target string, config *yamux.Config) {
 			log.Println(err)
 			return
 		}
+		if target == SELFPROXY {
+			// self proxy socks5 requests
+			go s5svr.ServeConn(p1)
+			continue
+		}
+
 		p2, err := net.DialTimeout("tcp", target, 5*time.Second)
 		if err != nil {
 			log.Println(err)
@@ -78,8 +91,8 @@ func handleMux(conn io.ReadWriteCloser, target string, config *yamux.Config) {
 }
 
 func handleClient(p1, p2 io.ReadWriteCloser) {
-	log.Println("stream opened")
-	defer log.Println("stream closed")
+	// log.Println("stream opened")
+	// defer log.Println("stream closed")
 	defer p1.Close()
 	defer p2.Close()
 
@@ -121,8 +134,8 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "target, t",
-			Value: "127.0.0.1:12948",
-			Usage: "target server address",
+			Value: SELFPROXY,
+			Usage: "target server address:[ip:port]. [self] will proxy socks5 requests by itself",
 		},
 		cli.StringFlag{
 			Name:   "key",
@@ -266,7 +279,17 @@ func main() {
 		dscp, sockbuf, keepalive := c.Int("dscp"), c.Int("sockbuf"), c.Int("keepalive")
 		target := c.String("target")
 
+		if target == SELFPROXY {
+			// socks5 proxy server in self proxy mode
+			conf := &socks5.Config{}
+			s5svr, err = socks5.New(conf)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
 		log.Println("listening on ", lis.Addr())
+		log.Println("target:", target)
 		log.Println("encryption:", crypt)
 		log.Println("nodelay parameters:", nodelay, interval, resend, nc)
 		log.Println("sndwnd:", sndwnd, "rcvwnd:", rcvwnd)
@@ -290,8 +313,8 @@ func main() {
 		config := &yamux.Config{
 			AcceptBacklog:          256,
 			EnableKeepAlive:        true,
-			KeepAliveInterval:      30 * time.Second,
-			ConnectionWriteTimeout: 30 * time.Second,
+			KeepAliveInterval:      10 * time.Second,
+			ConnectionWriteTimeout: 10 * time.Second,
 			MaxStreamWindowSize:    uint32(sockbuf),
 			LogOutput:              os.Stderr,
 		}
